@@ -4,22 +4,109 @@ output:
   html_document:
     keep_md: true
 ---
+========================================================
 
+##Loading and preprocessing the data
+```{r LoadPreprocess, echo = TRUE}
+library(knitr);
+rawdata <- read.csv("activity.csv")
+adata <- na.omit(rawdata)
+adata$date <- as.factor(as.character(adata$date)) # Removes date factors corresponding to NA values. 
+```
+##What is mean total number of steps taken per day?
+```{r libdplyr, echo = TRUE,warning=FALSE}
+library(dplyr)
+```
+```{r calcPlotSteps, echo = TRUE}
+dq1a <- adata %.%
+        group_by(date) %.%
+        summarize(totalsteps = sum(steps, na.rm = TRUE))
 
-## Loading and preprocessing the data
+# Alternative Code for dq1a using TApply
+# dqa <- tapply(adata$steps, adata$date, sum, na.rm = TRUE);
+# dq1a <- cbind.data.frame(date = names(dqa),totalsteps = unname(dqa))
 
+hist(dq1a[,2],
+        xlab = "Total Steps Per Day",
+	ylab = "Number of Days",
+	main = "Frequency of Total Steps in a day",
+        col = "red")
 
+meansteps <- mean(dq1a$totalsteps, na.rm = TRUE)
+mediansteps <- median(dq1a$totalsteps, na.rm = TRUE)
 
-## What is mean total number of steps taken per day?
+print(sprintf("Mean total steps taken per day: %f ", meansteps))
+print(sprintf("Median total steps taken per day: %f ", mediansteps))
+```
 
+##What is the average daily activity pattern ?
+```{r dailypattern, fig.width = 7, fig.height=6, echo=TRUE}
+dq2a <- adata %.%
+        group_by(interval) %.%
+	summarize(avgsteps = mean(steps))
 
+# Alternative method to calculate dq2a
+# dqa <- tapply(adata$steps, adata$interval, mean,na.rm = TRUE) 
+# dq2a <- cbind.data.frame(interval = as.integer(names(dqa)),avgsteps = unname(dqa))
 
-## What is the average daily activity pattern?
+plot(dq2a$interval, 
+	dq2a$avgsteps, 
+	type = "l",
+	xlab = "5-min Interval",
+	ylab = "Average Num of Steps",
+	main = "Average Daily Activity Pattern")
 
+maxavginterval = dq2a$interval[dq2a$avgsteps == max(dq2a$avgsteps)]
 
+print(sprintf("5-min time Interval with maximum average steps taken per day: %i ", maxavginterval))
+```
 
-## Imputing missing values
+##Imputing Missing Values
+```{r imputemissingvals, echo=TRUE }
+nacount <- nrow(rawdata[!complete.cases(rawdata),])
+print(sprintf("Row count with NA data: %i ", nacount))
+```
+###     Strategy:
+###Replace NA step values for corresponding intervals with mean interval values calculated above
+```{r newdataset, echo=TRUE}
+newdata <- rawdata
+sapply(unique(rawdata$interval),
+		function(x)
+		newdata[!complete.cases(newdata) & (newdata$interval == x),1] <<- dq2a$avgsteps[dq2a$interval == x])
+```
+### Plot Histogram of total steps with imputed data
+```{r newdatahist, echo=TRUE}
+dqc <- tapply(newdata$steps, newdata$date, sum, na.rm = TRUE);
+dq1c <- cbind.data.frame(date = names(dqc),totalsteps = unname(dqc))
 
+hist(dq1c[,2],
+	xlab = "Total Steps Per Day",
+	ylab = "Number of Days",
+	main = "Frequency of Total Steps in a day",
+        col = "blue")
 
+meansteps <- mean(dq1c$totalsteps)
+mediansteps <- median(dq1c$totalsteps)
 
-## Are there differences in activity patterns between weekdays and weekends?
+print(sprintf("Mean total steps taken per day: %f ", meansteps))
+print(sprintf("Median total steps taken per day: %f ", mediansteps))
+```
+##Are there differences in activity patterns between weekdays and weekends?
+```{r compareweekends, echo=TRUE}
+newdata$date <- as.Date(newdata$date, "%Y-%m-%d")
+newdata$weekend <- "weekday"
+newdata$weekend[weekdays(newdata$date) %in% c("Saturday","Sunday")] <- "weekend"
+newdata$weekend <- as.factor(newdata$weekend)
+
+dq2a <- newdata %.%
+		group_by(interval, weekend) %.%
+		summarize(avgsteps = mean(steps))
+
+library(ggplot2)
+qplot(x = interval,
+	y = avgsteps,
+	data = dq2a,
+	geom = c("line"),
+	facets = weekend~.,
+	ylab = "Average number of Steps")
+```
